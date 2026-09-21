@@ -25,13 +25,16 @@
 
     <script>
     (function () {
-        // --- 1. Читаем параметры ---
+        // --- 1. Read URL parameters ---
         const params = new URLSearchParams(window.location.search);
 
+        // Mode is either "chart" (single ticker) or "market" (heatmap).
+        // If only ?ticker=... is present, default to chart mode.
         const mode = params.get('mode') || (params.get('ticker') ? 'chart' : 'market');
         const ticker = (params.get('ticker') || '').trim();
         const tickersRaw = (params.get('tickers') || '').trim();
 
+        // Language: URL param > saved preference > fallback to Russian.
         const lang = params.get('lang')
             || localStorage.getItem('botgo_lang')
             || 'ru';
@@ -45,7 +48,8 @@
             if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
         }
 
-        // --- 3. Хелпер: добавляет префикс биржи, если его нет ---
+        // --- 3. Helper: prepend exchange prefix if missing ---
+        // TradingView widgets expect "EXCHANGE:TICKER" format.
         function normalizeSymbol(s) {
             s = (s || '').trim().toUpperCase();
             if (!s) return '';
@@ -54,15 +58,16 @@
 
         const root = document.getElementById('root');
 
+        // Route to the correct renderer based on mode.
         if (mode === 'chart' && ticker) {
             renderAdvancedChart(normalizeSymbol(ticker), lang);
         } else {
             renderMarketHeatmap(tickersRaw, lang);
         }
 
-        // ============ РЕЖИМ 1: ADVANCED CHART ============
+        // ============ MODE 1: ADVANCED CHART ============
         function renderAdvancedChart(symbol, lang) {
-            // TradingView поддерживает locale: en, ru и т.д.
+            // TradingView locale codes: "en", "ru", etc.
             const tvLocale = (lang === 'ru') ? 'ru' : 'en';
 
             document.title = symbol + ' — TradingView';
@@ -80,7 +85,7 @@
 
             root.appendChild(container);
 
-            // Формируем конфиг виджета
+            // Widget configuration.
             const config = {
                 allow_symbol_change: true,
                 calendar: false,
@@ -107,8 +112,8 @@
                 autosize: true
             };
 
-            // TradingView требует, чтобы конфиг лежал ВНУТРИ тега <script>
-            // от embed-widget-advanced-chart.js. Кладём JSON как текст.
+            // TradingView reads the config from the script tag's inner HTML.
+            // It must be a JSON string inside the embed script element.
             const script = document.createElement('script');
             script.type = 'text/javascript';
             script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
@@ -117,17 +122,18 @@
             container.appendChild(script);
         }
 
-        // ============ РЕЖИМ 2: MARKET HEATMAP ============
+        // ============ MODE 2: MARKET HEATMAP ============
         function renderMarketHeatmap(tickersRaw, lang) {
             const sectionName = (lang === 'en') ? 'Crypto' : 'Криптовалюты';
             document.title = (lang === 'en') ? 'Crypto Market' : 'Крипто-рынок';
 
+            // Parse comma-separated tickers and normalize each one.
             const symbols = tickersRaw
                 .split(',')
                 .map(normalizeSymbol)
                 .filter(Boolean);
 
-            // Загружаем модуль виджета ДО создания элемента
+            // Load the widget module BEFORE creating the custom element.
             const mod = document.createElement('script');
             mod.type = 'module';
             mod.src = 'https://widgets.tradingview-widget.com/w/en/tv-market-data.js';
