@@ -1,158 +1,450 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Market Data</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            background-color: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        #root {
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Активные уровни</title>
+<!-- Telegram SDK подключается, но не обязателен -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg:#fff; --text:#000; --hint:#999;
+    --button:#2481cc; --button-text:#fff;
+    --secondary-bg:#f0f0f0; --card-bg:#fff;
+    --border:rgba(0,0,0,0.08);
+    --green:#31a24c; --red:#e53935; --yellow:#f0a500;
+  }
+  :root[data-theme="dark"] {
+    --bg:#17212b; --text:#fff; --hint:#7d8b99;
+    --secondary-bg:#232e3c; --card-bg:#1e2a37;
+    --border:rgba(255,255,255,0.1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root[data-theme="auto"] {
+      --bg:#17212b; --text:#fff; --hint:#7d8b99;
+      --secondary-bg:#232e3c; --card-bg:#1e2a37;
+      --border:rgba(255,255,255,0.1);
+    }
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+    background:var(--bg); color:var(--text);
+    padding:12px; padding-bottom:80px; min-height:100vh;
+    font-size:15px; -webkit-tap-highlight-color:transparent;
+  }
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .header h1 { font-size:20px; font-weight:600; }
+  .badge { background:var(--secondary-bg); color:var(--hint); padding:4px 10px; border-radius:20px; font-size:13px; font-weight:500; }
+
+  .search-wrap { position:relative; margin-bottom:10px; }
+  .search-wrap input {
+    width:100%; padding:12px 16px 12px 40px; border-radius:12px;
+    border:1px solid var(--border); background:var(--secondary-bg);
+    color:var(--text); font-size:16px; outline:none;
+  }
+  .search-wrap::before { content:'🔍'; position:absolute; left:14px; top:50%; transform:translateY(-50%); font-size:16px; opacity:.6; }
+
+  .sort-row, .filters { display:flex; gap:8px; margin-bottom:10px; overflow-x:auto; padding-bottom:2px; }
+  .sort-row::-webkit-scrollbar, .filters::-webkit-scrollbar { display:none; }
+  .chip {
+    padding:8px 14px; border-radius:20px; border:1px solid var(--border);
+    background:transparent; color:var(--text); font-size:14px;
+    white-space:nowrap; cursor:pointer; transition:.15s;
+    display:flex; align-items:center; gap:6px;
+  }
+  .chip.active { background:var(--button); color:var(--button-text); border-color:var(--button); }
+
+  .touch-filter {
+    display:flex; align-items:center; gap:8px; margin-bottom:12px;
+    padding:10px 14px; background:var(--secondary-bg); border-radius:12px; font-size:14px;
+  }
+  .touch-filter label { color:var(--hint); }
+  .touch-filter input {
+    width:60px; padding:6px 10px; border-radius:8px;
+    border:1px solid var(--border); background:var(--card-bg);
+    color:var(--text); font-size:15px; text-align:center;
+    outline:none; -moz-appearance:textfield;
+  }
+  .touch-filter input::-webkit-outer-spin-button,
+  .touch-filter input::-webkit-inner-spin-button { -webkit-appearance:none; }
+  .touch-filter input:focus { border-color:var(--button); }
+  .touch-filter .hint { color:var(--hint); font-size:12px; margin-left:auto; }
+
+  .ticker-list { display:flex; flex-direction:column; gap:6px; }
+  .ticker-item {
+    background:var(--card-bg); border:1px solid var(--border);
+    border-radius:12px; padding:12px 14px; cursor:pointer;
+    display:flex; align-items:center; justify-content:space-between;
+    transition:.1s; gap:10px;
+  }
+  .ticker-item:active { transform:scale(.985); background:var(--secondary-bg); }
+  .ticker-left { display:flex; flex-direction:column; gap:4px; min-width:0; flex:1; }
+  .ticker-name { font-weight:600; font-size:16px; letter-spacing:.3px; display:flex; align-items:center; gap:6px; }
+  .ticker-name .fav { font-size:13px; }
+  .ticker-meta { font-size:12.5px; color:var(--hint); display:flex; gap:8px; flex-wrap:wrap; }
+  .ticker-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+  .ml-badge { font-size:11px; font-weight:600; padding:3px 7px; border-radius:8px; }
+  .ml-badge.low  { background:rgba(49,162,76,.15); color:var(--green); }
+  .ml-badge.mid  { background:rgba(240,165,0,.15); color:var(--yellow); }
+  .ml-badge.high { background:rgba(229,57,53,.15); color:var(--red); }
+  .ml-badge.none { background:var(--secondary-bg); color:var(--hint); }
+
+  .dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .dot.green { background:var(--green); }
+  .dot.gray  { background:#555; }
+  .level-count { font-size:13px; color:var(--hint); font-weight:500; }
+
+  .empty, .loading { text-align:center; padding:40px 20px; color:var(--hint); }
+  .spinner { width:28px; height:28px; border:3px solid var(--border); border-top-color:var(--button); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 12px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .footer-hint { text-align:center; font-size:12px; color:var(--hint); margin-top:20px; }
+  .error-box { background:rgba(229,57,53,.1); border:1px solid rgba(229,57,53,.3); color:var(--red); padding:14px; border-radius:10px; font-size:13px; line-height:1.5; }
+  .error-box code { background:rgba(0,0,0,.1); padding:2px 5px; border-radius:4px; font-size:12px; }
+</style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script>
-    (function () {
-        // --- 1. Read URL parameters ---
-        const params = new URLSearchParams(window.location.search);
+<div class="header">
+  <h1 id="title">📊 Активные уровни</h1>
+  <span class="badge" id="totalBadge">—</span>
+</div>
 
-        // Mode is either "chart" (single ticker) or "market" (heatmap).
-        // If only ?ticker=... is present, default to chart mode.
-        const mode = params.get('mode') || (params.get('ticker') ? 'chart' : 'market');
-        const ticker = (params.get('ticker') || '').trim();
-        const tickersRaw = (params.get('tickers') || '').trim();
+<div class="search-wrap">
+  <input type="text" id="searchInput" autocomplete="off" autocorrect="off" spellcheck="false">
+</div>
 
-        // Language: URL param > saved preference > fallback to Russian.
-        const lang = params.get('lang')
-            || localStorage.getItem('botgo_lang')
-            || 'ru';
-        localStorage.setItem('botgo_lang', lang);
+<div class="sort-row" id="sortRow">
+  <button class="chip active" data-sort="fresh"   data-i18n="sort_fresh">🕐 Свежие</button>
+  <button class="chip"        data-sort="touches" data-i18n="sort_touches">👆 Касания</button>
+  <button class="chip"        data-sort="volume"  data-i18n="sort_volume">📊 Объём</button>
+  <button class="chip"        data-sort="az"      data-i18n="sort_az">🔤 A→Z</button>
+</div>
 
-        // --- 2. Telegram Web App init ---
-        if (window.Telegram && window.Telegram.WebApp) {
-            const tg = window.Telegram.WebApp;
-            tg.ready();
-            tg.expand();
-            if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
-        }
+<div class="filters" id="filtersRow">
+  <button class="chip" data-filter="favorites"     data-i18n="filter_fav">❤️ Мои избранные</button>
+  <button class="chip" data-filter="touched_today" data-i18n="filter_today">📅 Касались сегодня</button>
+  <button class="chip" data-filter="fresh"         data-i18n="filter_fresh">✨ Свежие</button>
+</div>
 
-        // --- 3. Helper: prepend exchange prefix if missing ---
-        // TradingView widgets expect "EXCHANGE:TICKER" format.
-        function normalizeSymbol(s) {
-            s = (s || '').trim().toUpperCase();
-            if (!s) return '';
-            return s.includes(':') ? s : 'BINANCE:' + s;
-        }
+<div class="touch-filter">
+  <label data-i18n="min_touches">Мин. касаний:</label>
+  <input type="number" id="touchMin" min="3" value="3" step="1" inputmode="numeric">
+  <span class="hint">≥3</span>
+</div>
 
-        const root = document.getElementById('root');
+<div class="ticker-list" id="tickerList">
+  <div class="loading"><div class="spinner"></div><span data-i18n="loading">Загрузка...</span></div>
+</div>
 
-        // Route to the correct renderer based on mode.
-        if (mode === 'chart' && ticker) {
-            renderAdvancedChart(normalizeSymbol(ticker), lang);
-        } else {
-            renderMarketHeatmap(tickersRaw, lang);
-        }
+<div class="footer-hint" data-i18n="footer_hint">Нажми на тикер → бот пришлёт карточку в чат</div>
 
-        // ============ MODE 1: ADVANCED CHART ============
-        function renderAdvancedChart(symbol, lang) {
-            // TradingView locale codes: "en", "ru", etc.
-            const tvLocale = (lang === 'ru') ? 'ru' : 'en';
+<script>
+// ============================================================
+//  URL-параметры: fav, lang, theme, gist
+//  Пример: app.html?fav=BTC,ETH,SUI&lang=ru&theme=dark&gist=URL
+// ============================================================
+const params = new URLSearchParams(location.search);
 
-            document.title = symbol + ' — TradingView';
+// ⚠️ ЗАМЕНИ на реальный raw-URL gist
+const DEFAULT_GIST_URL = 'https://gist.githubusercontent.com/USERNAME/GIST_ID/raw/tickers.json';
+const GIST_URL = params.get('gist') || DEFAULT_GIST_URL;
 
-            const container = document.createElement('div');
-            container.className = 'tradingview-widget-container';
-            container.style.height = '100%';
-            container.style.width = '100%';
+const LANG       = (params.get('lang')  || 'ru').toLowerCase();
+const THEME      = (params.get('theme') || 'auto').toLowerCase();   // light | dark | auto
+const FAV_PARAM  = params.get('fav') || '';                          // "BTC,ETH,SUI"
 
-            const inner = document.createElement('div');
-            inner.className = 'tradingview-widget-container__widget';
-            inner.style.height = '100%';
-            inner.style.width = '100%';
-            container.appendChild(inner);
+// Избранное: "BTC,ETH" → Set{"BTCUSDT","ETHUSDT"}
+const favorites = new Set(
+  FAV_PARAM.split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean)
+    .map(s => s.endsWith('USDT') ? s : s + 'USDT')
+);
 
-            root.appendChild(container);
+// ============================================================
+//  Тема
+// ============================================================
+document.documentElement.dataset.theme = THEME === 'light' || THEME === 'dark' ? THEME : 'auto';
 
-            // Widget configuration.
-            const config = {
-                allow_symbol_change: true,
-                calendar: false,
-                details: false,
-                hide_side_toolbar: false,
-                hide_top_toolbar: false,
-                hide_legend: false,
-                hide_volume: false,
-                hotlist: false,
-                interval: '60',
-                locale: tvLocale,
-                save_image: true,
-                style: '1',
-                symbol: symbol,
-                theme: 'light',
-                timezone: 'Etc/UTC',
-                backgroundColor: '#ffffff',
-                gridColor: 'rgba(46, 46, 46, 0.2)',
-                watchlist: [],
-                withdateranges: false,
-                compareSymbols: [],
-                support_host: 'https://www.tradingview.com',
-                studies: [],
-                autosize: true
-            };
+// ============================================================
+//  Опциональный Telegram SDK
+//  Работает и без него (в браузере), и в Telegram.
+// ============================================================
+const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+let tgReady = false;
 
-            // TradingView reads the config from the script tag's inner HTML.
-            // It must be a JSON string inside the embed script element.
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-            script.async = true;
-            script.innerHTML = JSON.stringify(config);
-            container.appendChild(script);
-        }
+if (tg && typeof tg.ready === 'function') {
+  try {
+    tg.ready();
+    tg.expand();
+    tgReady = true;
+    // Если theme=auto и Telegram даёт тему — используем её
+    if (THEME === 'auto' && tg.themeParams) {
+      const p = tg.themeParams;
+      const r = document.documentElement.style;
+      if (p.bg_color)          r.setProperty('--bg', p.bg_color);
+      if (p.text_color)        r.setProperty('--text', p.text_color);
+      if (p.hint_color)        r.setProperty('--hint', p.hint_color);
+      if (p.button_color)      r.setProperty('--button', p.button_color);
+      if (p.button_text_color) r.setProperty('--button-text', p.button_text_color);
+      if (p.secondary_bg_color) r.setProperty('--secondary-bg', p.secondary_bg_color);
+    }
+  } catch (e) {
+    console.warn('Telegram init failed, running standalone', e);
+  }
+}
 
-        // ============ MODE 2: MARKET HEATMAP ============
-        function renderMarketHeatmap(tickersRaw, lang) {
-            const sectionName = (lang === 'en') ? 'Crypto' : 'Криптовалюты';
-            document.title = (lang === 'en') ? 'Crypto Market' : 'Крипто-рынок';
+// ============================================================
+//  i18n
+// ============================================================
+const I18N = {
+  ru: {
+    title: '📊 Активные уровни',
+    search_ph: 'Поиск тикера...',
+    sort_fresh: '🕐 Свежие',
+    sort_touches: '👆 Касания',
+    sort_volume: '📊 Объём',
+    sort_az: '🔤 A→Z',
+    filter_fav: '❤️ Мои избранные',
+    filter_today: '📅 Касались сегодня',
+    filter_fresh: '✨ Свежие',
+    min_touches: 'Мин. касаний:',
+    loading: 'Загрузка...',
+    footer_hint: 'Нажми на тикер → бот пришлёт карточку в чат',
+    total: 'монет',
+    nothing: 'Ничего не найдено',
+    nothing_sub: 'Попробуй изменить фильтры',
+    load_error: 'Не удалось загрузить данные',
+    time_now: 'только что',
+    time_min: 'мин назад',
+    time_hour: 'ч назад',
+    time_day: 'дн назад',
+    levels: 'ур.',
+    no_levels: 'нет',
+  },
+  en: {
+    title: '📊 Active Levels',
+    search_ph: 'Search ticker...',
+    sort_fresh: '🕐 Recent',
+    sort_touches: '👆 Touches',
+    sort_volume: '📊 Volume',
+    sort_az: '🔤 A→Z',
+    filter_fav: '❤️ Favorites',
+    filter_today: '📅 Touched today',
+    filter_fresh: '✨ Recent',
+    min_touches: 'Min touches:',
+    loading: 'Loading...',
+    footer_hint: 'Tap a ticker → bot sends card to chat',
+    total: 'coins',
+    nothing: 'Nothing found',
+    nothing_sub: 'Try adjusting filters',
+    load_error: 'Failed to load data',
+    time_now: 'just now',
+    time_min: 'm ago',
+    time_hour: 'h ago',
+    time_day: 'd ago',
+    levels: 'lvl',
+    no_levels: 'none',
+  }
+};
+const T = I18N[LANG] || I18N.ru;
 
-            // Parse comma-separated tickers and normalize each one.
-            const symbols = tickersRaw
-                .split(',')
-                .map(normalizeSymbol)
-                .filter(Boolean);
+function applyI18n() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const k = el.dataset.i18n;
+    if (T[k]) el.textContent = T[k];
+  });
+  document.getElementById('title').textContent = T.title;
+  document.getElementById('searchInput').placeholder = T.search_ph;
+  document.querySelector('.footer-hint').textContent = T.footer_hint;
+}
 
-            // Load the widget module BEFORE creating the custom element.
-            const mod = document.createElement('script');
-            mod.type = 'module';
-            mod.src = 'https://widgets.tradingview-widget.com/w/en/tv-market-data.js';
-            document.head.appendChild(mod);
+// ============================================================
+//  STATE
+// ============================================================
+let allTickers = [];
+const state = {
+  search: '',
+  sort: 'fresh',
+  filters: new Set(),
+  minTouches: 3,
+};
 
-            const widget = document.createElement('tv-market-data');
-            widget.setAttribute('view', 'performance');
-            widget.setAttribute('heatmap', '');
-            widget.setAttribute('symbol-sectors', JSON.stringify([{
-                sectionName: sectionName,
-                symbols: symbols
-            }]));
-            widget.style.display = 'block';
-            widget.style.width = '100%';
-            widget.style.height = '100%';
+// ============================================================
+//  DATA LOADING
+// ============================================================
+async function loadTickers() {
+  const list = document.getElementById('tickerList');
+  try {
+    const resp = await fetch(GIST_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    allTickers = data.tickers || [];
+    document.getElementById('totalBadge').textContent = allTickers.length + ' ' + T.total;
+  } catch (e) {
+    console.error(e);
+    const isFile = location.protocol === 'file:';
+    list.innerHTML = `
+      <div class="error-box">
+        <b>${T.load_error}</b><br>
+        <code>${e.message}</code>
+        ${isFile ? `<br><br>Ты открываешь файл через <code>file://</code> — fetch заблокирован браузером.<br>
+        Запусти локальный сервер:<br>
+        <code>cd static &amp;&amp; python -m http.server 8000</code><br>
+        и открой <code>http://localhost:8000/app.html</code>` : ''}
+      </div>`;
+    return;
+  }
+  render();
+}
 
-            root.appendChild(widget);
-        }
-    })();
-    </script>
+// ============================================================
+//  HELPERS
+// ============================================================
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return T.time_now;
+  if (mins < 60) return mins + ' ' + T.time_min;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + ' ' + T.time_hour;
+  return Math.floor(hrs / 24) + ' ' + T.time_day;
+}
+function isTouchedToday(t) {
+  const limit = Date.now() - 24 * 3600_000;
+  return (t.levels || []).some(l => new Date(l.last_touch_time).getTime() >= limit);
+}
+function isFresh(t) {
+  return new Date(t.updated_at).getTime() >= Date.now() - 24 * 3600_000;
+}
+function maxTouches(t) {
+  return (t.levels || []).reduce((m, l) => Math.max(m, l.touch_count || 0), 0);
+}
+function maxBreakout4h(t) {
+  return (t.levels || []).reduce((m, l) => {
+    const p = l.ml && l.ml.breakout_4h != null ? l.ml.breakout_4h : 0;
+    return Math.max(m, p);
+  }, 0);
+}
+function mlBadgeClass(p) {
+  if (p == null || p === 0) return 'none';
+  if (p < 0.3) return 'low';
+  if (p < 0.6) return 'mid';
+  return 'high';
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+function render() {
+  const list = document.getElementById('tickerList');
+  let items = [...allTickers];
+
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    items = items.filter(t => t.symbol.toLowerCase().includes(q));
+  }
+  if (state.filters.has('favorites'))     items = items.filter(t => favorites.has(t.symbol));
+  if (state.filters.has('touched_today')) items = items.filter(isTouchedToday);
+  if (state.filters.has('fresh'))         items = items.filter(isFresh);
+  if (state.minTouches > 0)               items = items.filter(t => maxTouches(t) >= state.minTouches);
+
+  switch (state.sort) {
+    case 'fresh':   items.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)); break;
+    case 'touches': items.sort((a,b) => maxTouches(b) - maxTouches(a)); break;
+    case 'volume':  items.sort((a,b) => (b.quote_volume_24h||0) - (a.quote_volume_24h||0)); break;
+    case 'az':      items.sort((a,b) => a.symbol.localeCompare(b.symbol)); break;
+  }
+
+  if (!items.length) {
+    list.innerHTML = `<div class="empty">${T.nothing}<br><small>${T.nothing_sub}</small></div>`;
+    return;
+  }
+
+  list.innerHTML = items.map(t => {
+    const hasLevels = (t.levels || []).length > 0;
+    const isFav = favorites.has(t.symbol);
+    const prob = maxBreakout4h(t);
+    const probText = prob ? Math.round(prob * 100) + '%' : '—';
+    return `
+      <div class="ticker-item" data-ticker="${t.symbol}">
+        <div class="ticker-left">
+          <span class="ticker-name">${isFav ? '<span class="fav">❤️</span>' : ''}${t.symbol}</span>
+          <span class="ticker-meta">
+            <span>👆 ${maxTouches(t)}</span>
+            <span>${timeAgo(t.updated_at)}</span>
+          </span>
+        </div>
+        <div class="ticker-right">
+          <span class="ml-badge ${mlBadgeClass(prob)}">${probText}</span>
+          <span class="level-count">${hasLevels ? t.levels.length + ' ' + T.levels : T.no_levels}</span>
+          <span class="dot ${hasLevels ? 'green' : 'gray'}"></span>
+        </div>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.ticker-item').forEach(el => {
+    el.addEventListener('click', () => openTicker(el.dataset.ticker));
+  });
+}
+
+// ============================================================
+//  ACTION: открыть тикер
+//  В Telegram → sendData боту
+//  В браузере → alert для теста
+// ============================================================
+function openTicker(ticker) {
+  const payload = JSON.stringify({ action: 'open_ticker', ticker });
+  if (tg && tgReady && typeof tg.sendData === 'function') {
+    try { tg.sendData(payload); return; } catch (e) { console.warn(e); }
+  }
+  // Fallback для отладки в браузере
+  alert('Открыть тикер: ' + ticker + '\n\npayload: ' + payload);
+}
+
+// ============================================================
+//  EVENTS
+// ============================================================
+document.getElementById('searchInput').addEventListener('input', e => {
+  state.search = e.target.value.trim();
+  render();
+});
+document.getElementById('sortRow').addEventListener('click', e => {
+  const btn = e.target.closest('.chip');
+  if (!btn) return;
+  document.querySelectorAll('#sortRow .chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  state.sort = btn.dataset.sort;
+  render();
+});
+document.getElementById('filtersRow').addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const f = chip.dataset.filter;
+  if (state.filters.has(f)) { state.filters.delete(f); chip.classList.remove('active'); }
+  else                      { state.filters.add(f);    chip.classList.add('active'); }
+  render();
+});
+const touchInput = document.getElementById('touchMin');
+touchInput.addEventListener('input', () => {
+  let v = parseInt(touchInput.value, 10);
+  if (isNaN(v) || v < 3) v = 3;
+  state.minTouches = v;
+  render();
+});
+touchInput.addEventListener('blur', () => {
+  let v = parseInt(touchInput.value, 10);
+  if (isNaN(v) || v < 3) touchInput.value = 3;
+});
+
+// ============================================================
+//  INIT
+// ============================================================
+applyI18n();
+loadTickers();
+</script>
 </body>
 </html>
