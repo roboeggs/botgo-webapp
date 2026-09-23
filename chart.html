@@ -37,7 +37,10 @@
             || 'ru';
         localStorage.setItem('botgo_lang', lang);
 
-        // --- 2. Telegram Web App init ---
+        // --- 2. Константы (объявлены ДО вызова функций, которые их используют) ---
+        const GIST_URL = 'https://gist.githubusercontent.com/48a088b813f9ffa9a26b05250231d0e2/raw/coin_list.json';
+
+        // --- 3. Telegram Web App init ---
         if (window.Telegram && window.Telegram.WebApp) {
             const tg = window.Telegram.WebApp;
             tg.ready();
@@ -45,7 +48,7 @@
             if (tg.setHeaderColor) tg.setHeaderColor('secondary_bg_color');
         }
 
-        // --- 3. Хелпер: добавляет префикс биржи, если его нет ---
+        // --- 4. Хелпер: добавляет префикс биржи, если его нет ---
         function normalizeSymbol(s) {
             s = (s || '').trim().toUpperCase();
             if (!s) return '';
@@ -62,9 +65,7 @@
 
         // ============ РЕЖИМ 1: ADVANCED CHART ============
         function renderAdvancedChart(symbol, lang) {
-            // TradingView поддерживает locale: en, ru и т.д.
             const tvLocale = (lang === 'ru') ? 'ru' : 'en';
-
             document.title = symbol + ' — TradingView';
 
             const container = document.createElement('div');
@@ -80,7 +81,6 @@
 
             root.appendChild(container);
 
-            // Формируем конфиг виджета
             const config = {
                 allow_symbol_change: true,
                 calendar: false,
@@ -107,8 +107,6 @@
                 autosize: true
             };
 
-            // TradingView требует, чтобы конфиг лежал ВНУТРИ тега <script>
-            // от embed-widget-advanced-chart.js. Кладём JSON как текст.
             const script = document.createElement('script');
             script.type = 'text/javascript';
             script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
@@ -117,23 +115,19 @@
             container.appendChild(script);
         }
 
-       // ============ РЕЖИМ 2: MARKET HEATMAP ============
-        const GIST_URL = 'https://gist.githubusercontent.com/raw/48a088b813f9ffa9a26b05250231d0e2/coin_list.json';
-
+        // ============ РЕЖИМ 2: MARKET HEATMAP ============
         async function renderMarketHeatmap(tickersRaw, lang) {
             const sectionName = (lang === 'en') ? 'Crypto' : 'Криптовалюты';
             document.title = (lang === 'en') ? 'Crypto Market' : 'Крипто-рынок';
 
             let symbols = [];
 
-            // 1) Если бот передал tickers=... — используем их
             if (tickersRaw) {
                 symbols = tickersRaw
                     .split(',')
                     .map(normalizeSymbol)
                     .filter(Boolean);
             } else {
-                // 2) Иначе — тянем список из Gist
                 root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tg-theme-hint-color,#999);">Загрузка...</div>';
                 try {
                     const resp = await fetch(GIST_URL, { cache: 'no-store' });
@@ -153,7 +147,6 @@
                 return;
             }
 
-            // Загружаем модуль виджета
             const mod = document.createElement('script');
             mod.type = 'module';
             mod.src = 'https://widgets.tradingview-widget.com/w/en/tv-market-data.js';
