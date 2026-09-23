@@ -386,7 +386,8 @@ const I18N = {
     months: ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'],
     days_short: 'д',
     hours_short: 'ч',
-    just_created: 'только создан'
+    just_created: 'только создан',
+    back_chat: '💬 В чат'
   },
   en: {
     title: '📊 Active Levels',
@@ -422,7 +423,8 @@ const I18N = {
     months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     days_short: 'd',
     hours_short: 'h',
-    just_created: 'just created'
+    just_created: 'just created',
+    back_chat: '💬 Back to Chat'
   }
 };
 const T = I18N[LANG] || I18N.ru;
@@ -474,13 +476,24 @@ function formatExactDate(dateStr) {
 }
 
 function formatPrice(val) {
-  if (val == null) return '—';
+  if (val == null || val === '') return '—';
   const num = Number(val);
-  if (isNaN(num)) return val;
-  if (num >= 1000) return num.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  if (num >= 1) return num.toFixed(2);
-  if (num >= 0.0001) return num.toFixed(4);
-  return num.toFixed(8);
+  if (isNaN(num)) return String(val);
+  if (num === 0) return '0';
+
+  const abs = Math.abs(num);
+  let decimals;
+  if (abs >= 1000)      decimals = 2;
+  else if (abs >= 100)  decimals = 3;
+  else if (abs >= 10)   decimals = 4;
+  else if (abs >= 1)    decimals = 4;
+  else if (abs >= 0.1)  decimals = 5;
+  else if (abs >= 0.01) decimals = 6;
+  else if (abs >= 0.001) decimals = 7;
+  else if (abs >= 0.0001) decimals = 8;
+  else                  decimals = 10;
+
+  return num.toFixed(decimals);
 }
 
 function calculateLevelAge(firstIso, lastIso) {
@@ -631,8 +644,8 @@ function render() {
               <button class="btn-action open-chart-btn" data-ticker="${t.symbol}">
                 ${T.open_chart}
               </button>
-              <button class="btn-action send-chat-btn" data-ticker="${t.symbol}">
-                ${T.send_chat}
+              <button class="btn-action back-chat-btn" data-ticker="${t.symbol}">
+                ${T.back_chat}
               </button>
             </div>
           </div>
@@ -654,24 +667,31 @@ function render() {
       });
     }
 
-    const sendBtn = el.querySelector('.send-chat-btn');
-    if (sendBtn) {
-      sendBtn.addEventListener('click', (e) => {
+    const backBtn = el.querySelector('.back-chat-btn');
+    if (backBtn) {
+      backBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        sendTickerToChat(sendBtn.dataset.ticker);
+        backToChat();
       });
     }
   });
 }
 
-function openChart(ticker) {
+function backToChat() {
   const tg = window.Telegram?.WebApp;
-  const payload = JSON.stringify({ action: 'open_chart', ticker });
-  if (tg && tgReady && typeof tg.sendData === 'function') {
-    try { tg.sendData(payload); } catch (e) {}
-  } else {
-    window.open(`https://www.tradingview.com/chart/?symbol=BINANCE:${ticker}`, '_blank');
+  if (tg && typeof tg.close === 'function') {
+    try { tg.close(); return; } catch (e) {}
   }
+  window.close();
+}
+
+function openChart(ticker) {
+  const url = `https://www.tradingview.com/chart/?symbol=BINANCE:${ticker}`;
+  const tg = window.Telegram?.WebApp;
+  if (tg && typeof tg.openLink === 'function') {
+    try { tg.openLink(url); return; } catch (e) {}
+  }
+  window.open(url, '_blank');
 }
 
 function sendTickerToChat(ticker) {
