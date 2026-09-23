@@ -273,16 +273,16 @@
 </div>
 
 <div class="sort-row" id="sortRow">
-  <button class="chip active" data-sort="fresh" data-i18n="sort_fresh">🕐 Свежие</button>
+  <button class="chip active" data-sort="fresh" data-i18n="sort_fresh">🕐 Обновлено</button>
   <button class="chip" data-sort="touches" data-i18n="sort_touches">👆 Касания</button>
+  <button class="chip" data-sort="breakout" data-i18n="sort_breakout">🎯 Пробой</button>
   <button class="chip" data-sort="volume" data-i18n="sort_volume">📊 Объём</button>
   <button class="chip" data-sort="az" data-i18n="sort_az">🔤 A→Z</button>
 </div>
 
 <div class="filters" id="filtersRow">
   <button class="chip" data-filter="favorites" data-i18n="filter_fav">❤️ Избранные</button>
-  <button class="chip" data-filter="touched_today" data-i18n="filter_today">📅 Касались сегодня</button>
-  <button class="chip" data-filter="fresh" data-i18n="filter_fresh">✨ Свежие</button>
+  <button class="chip" data-filter="touched_recent" data-i18n="filter_touched_recent">📅 Касались ≤2д</button>
 </div>
 
 <div class="touch-filter">
@@ -355,12 +355,13 @@ const I18N = {
   ru: {
     title: '📊 Активные уровни',
     search_ph: 'Поиск тикера...',
-    sort_fresh: '🕐 Свежие',
+    sort_fresh: '🕐 Обновлено',
     sort_touches: '👆 Касания',
+    sort_breakout: '🎯 Пробой',
     sort_volume: '📊 Объём',
     sort_az: '🔤 A→Z',
     filter_fav: '❤️ Избранные',
-    filter_today: '📅 Касались сегодня',
+    filter_touched_recent: '📅 Касались ≤2д',
     filter_fresh: '✨ Свежие',
     min_touches: 'Мин. касаний:',
     loading: 'Загрузка...',
@@ -392,12 +393,13 @@ const I18N = {
   en: {
     title: '📊 Active Levels',
     search_ph: 'Search ticker...',
-    sort_fresh: '🕐 Recent',
+    sort_fresh: '🕐 Updated',
     sort_touches: '👆 Touches',
+    sort_breakout: '🎯 Breakout',
     sort_volume: '📊 Volume',
     sort_az: '🔤 A→Z',
     filter_fav: '❤️ Favorites',
-    filter_today: '📅 Touched today',
+    filter_touched_recent: '📅 Touched ≤2d',
     filter_fresh: '✨ Recent',
     min_touches: 'Min touches:',
     loading: 'Loading...',
@@ -554,15 +556,26 @@ function render() {
     const q = state.search.toLowerCase();
     items = items.filter(t => t.symbol.toLowerCase().includes(q));
   }
-  if (state.filters.has('favorites')) items = items.filter(t => favorites.has(t.symbol));
-  if (state.filters.has('fresh')) items = items.filter(t => new Date(t.updated_at).getTime() >= Date.now() - 24 * 3600_000);
-  if (state.minTouches > 0) items = items.filter(t => maxTouches(t) >= state.minTouches);
+  if (state.filters.has('favorites')) {
+    items = items.filter(t => favorites.has(t.symbol));
+  }
+  if (state.filters.has('touched_recent')) {
+    // «Свежий» = хотя бы один уровень касался последние 2 дня (48 ч).
+    const limit = Date.now() - 2 * 24 * 3600_000;
+    items = items.filter(t =>
+      (t.levels || []).some(l => new Date(l.last_touch_time).getTime() >= limit)
+    );
+  }
+  if (state.minTouches > 0) {
+    items = items.filter(t => maxTouches(t) >= state.minTouches);
+  }
 
   switch (state.sort) {
-    case 'fresh': items.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)); break;
-    case 'touches': items.sort((a,b) => maxTouches(b) - maxTouches(a)); break;
-    case 'volume': items.sort((a,b) => (b.quote_volume_24h||0) - (a.quote_volume_24h||0)); break;
-    case 'az': items.sort((a,b) => a.symbol.localeCompare(b.symbol)); break;
+    case 'fresh':    items.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)); break;
+    case 'touches':  items.sort((a,b) => maxTouches(b) - maxTouches(a)); break;
+    case 'breakout': items.sort((a,b) => maxBreakout4h(b) - maxBreakout4h(a)); break;
+    case 'volume':   items.sort((a,b) => (b.quote_volume_24h||0) - (a.quote_volume_24h||0)); break;
+    case 'az':       items.sort((a,b) => a.symbol.localeCompare(b.symbol)); break;
   }
 
   if (!items.length) {
