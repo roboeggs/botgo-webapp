@@ -117,17 +117,43 @@
             container.appendChild(script);
         }
 
-        // ============ РЕЖИМ 2: MARKET HEATMAP ============
-        function renderMarketHeatmap(tickersRaw, lang) {
+       // ============ РЕЖИМ 2: MARKET HEATMAP ============
+        const GIST_URL = 'https://gist.githubusercontent.com/48a088b813f9ffa9a26b05250231d0e2/raw/coin_list.json';
+
+        async function renderMarketHeatmap(tickersRaw, lang) {
             const sectionName = (lang === 'en') ? 'Crypto' : 'Криптовалюты';
             document.title = (lang === 'en') ? 'Crypto Market' : 'Крипто-рынок';
 
-            const symbols = tickersRaw
-                .split(',')
-                .map(normalizeSymbol)
-                .filter(Boolean);
+            let symbols = [];
 
-            // Загружаем модуль виджета ДО создания элемента
+            // 1) Если бот передал tickers=... — используем их
+            if (tickersRaw) {
+                symbols = tickersRaw
+                    .split(',')
+                    .map(normalizeSymbol)
+                    .filter(Boolean);
+            } else {
+                // 2) Иначе — тянем список из Gist
+                root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tg-theme-hint-color,#999);">Загрузка...</div>';
+                try {
+                    const resp = await fetch(GIST_URL, { cache: 'no-store' });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    const data = await resp.json();
+                    const tickers = (data.tickers || []).map(t => t.symbol);
+                    symbols = tickers.map(normalizeSymbol).filter(Boolean);
+                    root.innerHTML = '';
+                } catch (e) {
+                    root.innerHTML = '<div style="padding:40px;text-align:center;color:#e53935;">Не удалось загрузить список монет<br><small>' + e.message + '</small></div>';
+                    return;
+                }
+            }
+
+            if (symbols.length === 0) {
+                root.innerHTML = '<div style="padding:40px;text-align:center;color:var(--tg-theme-hint-color,#999);">Нет активных монет</div>';
+                return;
+            }
+
+            // Загружаем модуль виджета
             const mod = document.createElement('script');
             mod.type = 'module';
             mod.src = 'https://widgets.tradingview-widget.com/w/en/tv-market-data.js';
